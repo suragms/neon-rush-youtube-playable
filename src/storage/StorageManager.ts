@@ -3,7 +3,7 @@ interface SaveData { best: number; coins: number; settings: Settings; achievemen
 const KEY = 'neon-rush.v1';
 const safeNumber = (value: unknown): number => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 export class StorageManager {
-  data: SaveData = { best: 0, coins: 0, settings: { sound: true, music: true, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches }, achievements: [] };
+  data: SaveData = { best: 0, coins: 0, settings: { sound: true, music: true, reducedMotion: typeof matchMedia !== 'undefined' ? matchMedia('(prefers-reduced-motion: reduce)').matches : false }, achievements: [] };
   available = true;
   constructor() {
     try {
