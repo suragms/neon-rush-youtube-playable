@@ -3,33 +3,51 @@
  *
  * Isolates all YouTube Playables SDK interactions from the core game.
  *
- * The official YouTube Playables SDK is documented at:
- *   https://developers.google.com/youtube/gaming/playables
+ * ─── Official SDK ─────────────────────────────────────────────────────────
  *
- * The SDK is injected by the YouTube container as `window.YT_PLAYABLES` (or
- * similar) only when the game runs inside the actual YouTube iframe.  When
- * running locally the adapter provides safe no-op fallbacks so development
- * and testing work without the real container.
+ * The YouTube Playables SDK is loaded as an ESM module from Google's CDN:
+ *   https://www.gstatic.com/ytgame/sdk/ytgame.mjs
  *
- * IMPORTANT: This adapter implements ONLY what is documented in the official
- * SDK.  No methods have been invented.  Any methods marked "TODO: verify
- * exact API signature" must be confirmed against the live documentation
- * before submission.
+ * Full API reference (requires YouTube Playables partner program access):
+ *   https://developers.google.com/youtube/gaming/playables/reference/js
  *
- * ─── What must be tested in the real YouTube environment ─────────────────
- *  1. `ytgame.game.firstFrameReady()` — call once after the canvas is painted.
- *  2. `ytgame.game.gameReady()` — call when the game is fully interactive.
- *  3. `ytgame.system.onPause` / `ytgame.system.onResume` — lifecycle hooks.
- *  4. `ytgame.audio` methods — audio context and mute state handoff.
- *  5. Score submission via `ytgame.engagement.sendScore(score)`.
- * ────────────────────────────────────────────────────────────────────────
+ * ─── Integration pattern ──────────────────────────────────────────────────
+ *
+ *   import ytgame from 'https://www.gstatic.com/ytgame/sdk/ytgame.mjs';
+ *   const sdk = await ytgame.game.initializeSdk();
+ *   sdk.game.firstFrameReady();
+ *   sdk.game.gameReady();
+ *   sdk.sendScore({ value: BigInt(score) });
+ *
+ * ─── Local development ────────────────────────────────────────────────────
+ *
+ * The SDK CDN module is ONLY available inside the real YouTube Playables
+ * iframe. When running locally the dynamic import will fail (network error
+ * or because the environment is not a Playables frame). The adapter detects
+ * this and falls back to safe no-ops + developer console helpers.
+ *
+ * window.__ytdev is a LOCAL DEVELOPMENT TOOL ONLY. It is NOT the YouTube
+ * environment. It does NOT submit scores. It does NOT certify the game.
+ *
+ * ─── What requires the real YouTube environment ───────────────────────────
+ *  1. Verifying that the SDK CDN URL resolves correctly.
+ *  2. Verifying that initializeSdk() resolves within the expected timeout.
+ *  3. Verifying that firstFrameReady / gameReady trigger the correct YouTube
+ *     loading screen dismissal.
+ *  4. Verifying that sendScore actually posts to the leaderboard.
+ *  5. Verifying pause/resume lifecycle from YouTube host events (ads, etc.).
+ *  6. Verifying audio mute state handoff from the YouTube container.
+ * ─────────────────────────────────────────────────────────────────────────
  */
 
-/** Shape of the official ytgame namespace, typed minimally. */
-interface YTGameSDK {
+// ── SDK types ─────────────────────────────────────────────────────────────
+
+/** Minimal typing of the SDK instance returned by initializeSdk(). */
+interface YTGameSDKInstance {
   game: {
     firstFrameReady(): void;
-    gameReady(): void;
+    /** gameReady signals the game is interactive. Supports audio by default. */
+    gameReady(opts?: { supportsAudio?: boolean }): void;
   };
   system: {
     onPause(cb: () => void): void;
@@ -39,16 +57,18 @@ interface YTGameSDK {
     onAudioDisabled(cb: () => void): void;
     onAudioEnabled(cb: () => void): void;
   };
-  engagement: {
-    sendScore(score: number): void;
+  /** Submit final score. Value must be a BigInt. */
+  sendScore(data: { value: bigint }): void;
+}
+
+/** Minimal typing of the ytgame default export from the CDN module. */
+interface YTGameModule {
+  game: {
+    initializeSdk(): Promise<YTGameSDKInstance>;
   };
 }
 
-declare global {
-  interface Window {
-    ytgame?: YTGameSDK;
-  }
-}
+// ── Adapter ───────────────────────────────────────────────────────────────
 
 export interface PlayablesCallbacks {
   onPause?: () => void;
@@ -57,87 +77,144 @@ export interface PlayablesCallbacks {
   onAudioEnabled?: () => void;
 }
 
-export class YouTubePlayablesAdapter {
-  private sdk: YTGameSDK | null = null;
-  readonly isPlayablesEnvironment: boolean;
+const SDK_URL = 'https://www.gstatic.com/ytgame/sdk/ytgame.mjs';
 
-  constructor() {
-    this.sdk = window.ytgame ?? null;
-    this.isPlayablesEnvironment = this.sdk !== null;
-  }
+export class YouTubePlayablesAdapter {
+  /** Set to true once initializeSdk() resolves successfully. */
+  isPlayablesEnvironment = false;
+
+  private sdk: YTGameSDKInstance | null = null;
+  private initPromise: Promise<void> | null = null;
 
   /**
-   * Register lifecycle callbacks and hook into the SDK if present.
-   * Safe to call in all environments.
+   * Attempt to load the official YouTube Playables SDK and initialize it.
+   *
+   * Must be called as early as possible (before firstFrameReady).
+   * Returns silently if outside the YouTube Playables environment.
+   *
+   * @param callbacks  Lifecycle event handlers from the host application.
    */
-  init(callbacks: PlayablesCallbacks): void {
-    if (!this.sdk) {
-      // Development fallback — wire keyboard shortcuts for manual testing
-      this._devFallback(callbacks);
-      return;
-    }
+  async init(callbacks: PlayablesCallbacks): Promise<void> {
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this._doInit(callbacks);
+    return this.initPromise;
+  }
 
-    if (callbacks.onPause) this.sdk.system.onPause(callbacks.onPause);
-    if (callbacks.onResume) this.sdk.system.onResume(callbacks.onResume);
-    if (callbacks.onAudioDisabled) this.sdk.audio.onAudioDisabled(callbacks.onAudioDisabled);
-    if (callbacks.onAudioEnabled) this.sdk.audio.onAudioEnabled(callbacks.onAudioEnabled);
+  private async _doInit(callbacks: PlayablesCallbacks): Promise<void> {
+    try {
+      // Dynamic import from the CDN — only resolves inside the YouTube iframe.
+      const module = (await import(/* @vite-ignore */ SDK_URL)) as { default: YTGameModule };
+      const ytgame = module.default;
+      this.sdk = await ytgame.game.initializeSdk();
+      this.isPlayablesEnvironment = true;
+
+      // Apply the BigInt JSON serialization workaround (known SDK bug).
+      // This prevents "A BigInt value cannot be serialized in JSON" errors
+      // when sendScore is called internally by the SDK.
+      if (typeof BigInt !== 'undefined' && !(BigInt.prototype as { toJSON?: unknown }).toJSON) {
+        (BigInt.prototype as { toJSON?: () => string }).toJSON = function () {
+          return this.toString();
+        };
+      }
+
+      // Register lifecycle callbacks on the SDK instance.
+      if (callbacks.onPause)        this.sdk.system.onPause(callbacks.onPause);
+      if (callbacks.onResume)       this.sdk.system.onResume(callbacks.onResume);
+      if (callbacks.onAudioDisabled) this.sdk.audio.onAudioDisabled(callbacks.onAudioDisabled);
+      if (callbacks.onAudioEnabled)  this.sdk.audio.onAudioEnabled(callbacks.onAudioEnabled);
+
+    } catch {
+      // Not inside the YouTube Playables container, or SDK failed to load.
+      // Fall back to local dev helpers — this is intentional and expected.
+      this.sdk = null;
+      this.isPlayablesEnvironment = false;
+      this._devFallback(callbacks);
+    }
   }
 
   /**
    * Signal that the first frame has been painted.
-   * Must be called as early as possible after the canvas first renders.
+   *
+   * Must be called as soon as the canvas is visibly rendered — before or
+   * shortly after init() resolves. Safe no-op outside the YouTube environment.
    */
   firstFrameReady(): void {
-    if (this.sdk) {
-      this.sdk.game.firstFrameReady();
-    }
-    // No-op fallback in dev
+    this.sdk?.game.firstFrameReady();
   }
 
   /**
    * Signal that the game is fully loaded and interactive.
-   * Call this after all required assets are loaded and the game UI is ready.
+   *
+   * Must be called after all required assets and UI are ready.
+   * Neon Rush supports audio, so no options object is passed.
+   * Safe no-op outside the YouTube environment.
    */
   gameReady(): void {
-    if (this.sdk) {
-      this.sdk.game.gameReady();
-    }
-    // No-op fallback in dev
+    this.sdk?.game.gameReady();
   }
 
   /**
-   * Submit the player's score at game-over.
-   * Only sent when inside the real YouTube container.
+   * Submit the player's final score.
+   *
+   * IMPORTANT: Only executes when inside the real YouTube Playables
+   * environment. Silently ignored during local development — no score is
+   * submitted or faked.
+   *
+   * The YouTube Playables SDK requires the value as a BigInt.
    */
   sendScore(score: number): void {
-    if (this.sdk) {
-      this.sdk.engagement.sendScore(Math.max(0, Math.floor(score)));
+    if (!this.sdk) {
+      // ── LOCAL DEVELOPMENT ────────────────────────────────────────────────
+      // We are NOT inside the YouTube Playables environment.
+      // No score is submitted. No API call is made.
+      // This is intentional — do not add a fake submission here.
+      // ─────────────────────────────────────────────────────────────────────
+      return;
+    }
+
+    try {
+      const safeScore = Math.max(0, Math.floor(score));
+      this.sdk.sendScore({ value: BigInt(safeScore) });
+    } catch (err) {
+      // Score submission failed — log for debugging but do not crash the game.
+      console.warn('[YouTubePlayablesAdapter] sendScore failed:', err);
     }
   }
 
-  // ── Development fallback ─────────────────────────────────────────────────
+  // ── Local development fallback ────────────────────────────────────────────
 
   /**
-   * In local dev, simulate SDK events via console commands so the adapter
-   * integration path can still be exercised without the real container.
+   * When running outside the YouTube Playables container, expose console
+   * helpers so developers can manually trigger SDK lifecycle events for
+   * integration testing.
+   *
+   * ══════════════════════════════════════════════════════════════════════
+   * WARNING: window.__ytdev is a LOCAL DEVELOPMENT TOOL ONLY.
+   *          It is NOT the YouTube Playables environment.
+   *          It does NOT submit scores.
+   *          It does NOT trigger real YouTube lifecycle events.
+   *          Remove or ignore it in production/certification testing.
+   * ══════════════════════════════════════════════════════════════════════
+   *
+   * Usage in browser DevTools console:
+   *   window.__ytdev.pause()     → simulate YouTube pause event
+   *   window.__ytdev.resume()    → simulate YouTube resume event
+   *   window.__ytdev.audioOff()  → simulate YouTube audio-disabled event
+   *   window.__ytdev.audioOn()   → simulate YouTube audio-enabled event
    */
   private _devFallback(callbacks: PlayablesCallbacks): void {
-    // Expose helpers on window for manual testing in the browser console:
-    //   window.__ytdev.pause()
-    //   window.__ytdev.resume()
-    //   window.__ytdev.audioOff()
-    //   window.__ytdev.audioOn()
     (window as Window & { __ytdev?: unknown }).__ytdev = {
-      pause: () => callbacks.onPause?.(),
-      resume: () => callbacks.onResume?.(),
+      pause:    () => callbacks.onPause?.(),
+      resume:   () => callbacks.onResume?.(),
       audioOff: () => callbacks.onAudioDisabled?.(),
-      audioOn: () => callbacks.onAudioEnabled?.(),
+      audioOn:  () => callbacks.onAudioEnabled?.(),
     };
-    if (typeof window !== 'undefined' && !window.ytgame) {
-      console.info(
-        '[YouTubePlayablesAdapter] Running outside YouTube container.\n' +
-        'Dev helpers available: window.__ytdev.pause/resume/audioOff/audioOn'
-      );
-    }
+
+    console.info(
+      '[YouTubePlayablesAdapter] LOCAL DEVELOPMENT MODE\n' +
+      'Not running inside the YouTube Playables container.\n' +
+      'SDK not loaded. Scores are NOT submitted.\n' +
+      'Dev helpers: window.__ytdev.pause / resume / audioOff / audioOn'
+    );
   }
 }
