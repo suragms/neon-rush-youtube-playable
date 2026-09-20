@@ -25,6 +25,7 @@ import type { RunStats } from '../game/types';
 const STYLE = `
 /* ── Reset & base ── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
 html,body{
   width:100%;height:100%;overflow:hidden;
   background:#090d17;
@@ -805,13 +806,22 @@ export class UIManager {
     const div1 = el('div', 'nr-divider');
 
     const playBtn = btn('▶  PLAY', 'primary', 'Start game');
-    playBtn.addEventListener('click', () => this.callbacks.onStart());
+    playBtn.addEventListener('click', () => {
+      console.info('[UI] PLAY clicked');
+      this.callbacks.onStart();
+    });
 
     const howBtn = btn('HOW TO PLAY', 'ghost', 'How to play');
-    howBtn.addEventListener('click', () => this._showPanel(this.howToScreen));
+    howBtn.addEventListener('click', () => {
+      console.info('[UI] HOW TO PLAY clicked');
+      this._showPanel(this.howToScreen);
+    });
 
     const settBtn = btn('SETTINGS', 'ghost', 'Settings');
-    settBtn.addEventListener('click', () => this._showPanel(this.settingsScreen));
+    settBtn.addEventListener('click', () => {
+      console.info('[UI] SETTINGS clicked');
+      this._showPanel(this.settingsScreen);
+    });
 
     const btnGroup = el('div', 'nr-btn-group');
     btnGroup.appendChild(playBtn);
