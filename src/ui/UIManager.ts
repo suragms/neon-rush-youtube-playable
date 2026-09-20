@@ -235,10 +235,20 @@ html,body{
 #nr-hud{
   position:fixed;top:0;left:0;right:0;z-index:20;
   display:flex;align-items:flex-start;justify-content:space-between;
-  padding:env(safe-area-inset-top, 8px) 14px 0;
+  padding:env(safe-area-inset-top, 8px) 10px 0;
   padding-top:max(env(safe-area-inset-top,0px),8px);
   pointer-events:none;
-  gap:6px;
+  gap:4px;
+  flex-wrap:nowrap;
+}
+/* HUD pause button */
+.nr-hud-pause{
+  min-width:44px;width:44px;height:44px;
+  padding:0;border-radius:8px;
+  pointer-events:auto;
+  font-size:18px;
+  border-color:rgba(0,245,255,.25);
+  flex-shrink:0;
 }
 /* ── Scanlines ── */
 #nr-scanlines{
@@ -362,8 +372,10 @@ html,body{
   color:#557;letter-spacing:.14em;text-transform:uppercase;
 }
 .nr-scores-row{
-  display:flex;gap:clamp(20px,5vw,40px);
+  display:flex;gap:clamp(12px,4vw,40px);
   align-items:flex-end;
+  flex-wrap:wrap;
+  justify-content:center;
 }
 .nr-scores-row .nr-score-block.best .nr-score-num{
   color:#ffe600;font-size:clamp(20px,5vw,36px);
