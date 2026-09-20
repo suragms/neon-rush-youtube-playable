@@ -132,6 +132,45 @@ npm run preview
 
 ---
 
+## 🎨 UI/UX Improvements (v1.1)
+
+The UI has been fully redesigned with a premium futuristic neon visual language.
+
+### Menu
+- Glass-morphism card with `NEON RUSH` title and `RUN · JUMP · SURVIVE` tagline
+- **Best Score badge** showing the locally persisted high score
+- **[▶ PLAY]** primary CTA with neon glow and scale animation
+- **[HOW TO PLAY]** panel with full control instructions
+- **[SETTINGS]** panel with Sound and Music pill-toggle switches
+
+### HUD (In-Game)
+- Three compact pill widgets: **SCORE** (cyan) · **BEST** · **COINS** (gold)
+- Translucent glass backing so gameplay remains visible
+- Inline **⏸ Pause** button (also keyboard P / Escape)
+
+### Countdown
+- 3 → 2 → 1 → GO! full-screen overlay before each game run
+- CSS pop-scale animation with `prefers-reduced-motion` fallback
+
+### Pause Screen
+- Glass card overlay with **[▶ RESUME]**, **[↺ RESTART]**, audio toggles, **[MAIN MENU]**
+- Stops all physics updates and animation frames cleanly
+- Keyboard P / Escape and tap to resume
+
+### Game Over Screen
+- Large SCORE vs BEST side-by-side display
+- **★ NEW BEST ★** pulsing badge when a record is set
+- **[▶ PLAY AGAIN]** and **[MAIN MENU]** buttons
+
+### General UX
+- All buttons: `min-height 44px`, focus rings, hover/active states
+- `prefers-reduced-motion` disables decorative animations system-wide
+- Safe-area insets for iOS notch/home-bar devices
+- Scroll prevention on all touch events during gameplay
+- Keyboard: Space/↑ jump, P/Escape pause, M mute — all preserved
+
+---
+
 ## ♿ Accessibility & Responsiveness
 
 - **Responsive Design**: Scales fluidly across mobile phones, tablets, and desktop displays in both portrait and landscape orientations without breaking layout.
