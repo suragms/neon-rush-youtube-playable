@@ -150,10 +150,35 @@ neon-rush-youtube-playable/
 
 ---
 
-## 11. CERTIFICATION STATUS
+## 11. CERTIFICATION HARDENING SUMMARY
+
+Changes applied during the September 2026 hardening pass:
+
+**SDK lifecycle:**
+- `firstFrameReady()` queued in adapter if called before `initializeSdk()` resolves; flushed once SDK is ready
+- `showMenu()` now called before `gameReady()` fires — game is visibly interactive first
+- `gameReady({ supportsAudio: true })` — correctly signals Web Audio support
+
+**Game over screen:**
+- Now shows SCORE, BEST, and COINS for the completed run
+
+**Input:**
+- Escape closes How To Play / Settings panels when open; falls back to pause toggle
+- `preventDefault` not called on Escape
+
+**Storage:**
+- Save data versioned with `version: 1` field for schema safety
+
+**Build (post-hardening):** 46.89 KB raw / 13.62 KB gzip
+
+**Tests:** 46/46 passing
+
+---
+
+## 12. CERTIFICATION STATUS
 > Development complete. Playables-ready. Official YouTube certification pending.
 
 ---
 
-## 12. FINAL PROJECT SUMMARY
-Neon Rush v1.0.0 is a lightweight HTML5 infinite-runner game built with TypeScript, Vite, Canvas2D, and Web Audio API. It features 46 passing tests and a highly optimized build.
+## 13. FINAL PROJECT SUMMARY
+Neon Rush v1.0.0 is a lightweight HTML5 infinite-runner game built with TypeScript, Vite, Canvas2D, and Web Audio API. It features 46 passing unit tests, a 46.89 KB production build, full YouTube Playables SDK integration, and a completed certification hardening pass.

@@ -16,8 +16,15 @@
  *   import ytgame from 'https://www.gstatic.com/ytgame/sdk/ytgame.mjs';
  *   const sdk = await ytgame.game.initializeSdk();
  *   sdk.game.firstFrameReady();
- *   sdk.game.gameReady();
+ *   sdk.game.gameReady({ supportsAudio: true });
  *   sdk.sendScore({ value: BigInt(score) });
+ *
+ * ─── firstFrameReady timing ───────────────────────────────────────────────
+ *
+ * firstFrameReady() may be called before initializeSdk() resolves. The
+ * adapter queues the call and flushes it as soon as the SDK is available.
+ * This ensures the signal is never lost while still being delivered at the
+ * earliest opportunity after the SDK is ready.
  *
  * ─── Local development ────────────────────────────────────────────────────
  *
@@ -46,7 +53,7 @@
 interface YTGameSDKInstance {
   game: {
     firstFrameReady(): void;
-    /** gameReady signals the game is interactive. Supports audio by default. */
+    /** gameReady signals the game is interactive. */
     gameReady(opts?: { supportsAudio?: boolean }): void;
   };
   system: {
@@ -87,9 +94,15 @@ export class YouTubePlayablesAdapter {
   private initPromise: Promise<void> | null = null;
 
   /**
+   * Whether firstFrameReady() was called before the SDK finished loading.
+   * If so, the call is replayed immediately after initializeSdk() resolves.
+   */
+  private firstFramePending = false;
+
+  /**
    * Attempt to load the official YouTube Playables SDK and initialize it.
    *
-   * Must be called as early as possible (before firstFrameReady).
+   * Must be called as early as possible (before or shortly after firstFrameReady).
    * Returns silently if outside the YouTube Playables environment.
    *
    * @param callbacks  Lifecycle event handlers from the host application.
@@ -117,9 +130,15 @@ export class YouTubePlayablesAdapter {
         };
       }
 
+      // Flush any queued firstFrameReady call that arrived before init resolved.
+      if (this.firstFramePending) {
+        this.sdk.game.firstFrameReady();
+        this.firstFramePending = false;
+      }
+
       // Register lifecycle callbacks on the SDK instance.
-      if (callbacks.onPause)        this.sdk.system.onPause(callbacks.onPause);
-      if (callbacks.onResume)       this.sdk.system.onResume(callbacks.onResume);
+      if (callbacks.onPause)         this.sdk.system.onPause(callbacks.onPause);
+      if (callbacks.onResume)        this.sdk.system.onResume(callbacks.onResume);
       if (callbacks.onAudioDisabled) this.sdk.audio.onAudioDisabled(callbacks.onAudioDisabled);
       if (callbacks.onAudioEnabled)  this.sdk.audio.onAudioEnabled(callbacks.onAudioEnabled);
 
@@ -128,6 +147,7 @@ export class YouTubePlayablesAdapter {
       // Fall back to local dev helpers — this is intentional and expected.
       this.sdk = null;
       this.isPlayablesEnvironment = false;
+      this.firstFramePending = false;
       this._devFallback(callbacks);
     }
   }
@@ -135,22 +155,28 @@ export class YouTubePlayablesAdapter {
   /**
    * Signal that the first frame has been painted.
    *
-   * Must be called as soon as the canvas is visibly rendered — before or
-   * shortly after init() resolves. Safe no-op outside the YouTube environment.
+   * Call this as soon as the canvas has its first visible pixels. If the SDK
+   * is not yet ready the call is queued and replayed once initializeSdk()
+   * resolves. Safe no-op outside the YouTube environment.
    */
   firstFrameReady(): void {
-    this.sdk?.game.firstFrameReady();
+    if (this.sdk) {
+      this.sdk.game.firstFrameReady();
+    } else {
+      // SDK not yet ready — queue the call so it fires after init resolves.
+      this.firstFramePending = true;
+    }
   }
 
   /**
    * Signal that the game is fully loaded and interactive.
    *
-   * Must be called after all required assets and UI are ready.
-   * Neon Rush supports audio, so no options object is passed.
+   * Must be called after all required assets and UI are ready and visible.
+   * Passes supportsAudio: true because Neon Rush has full Web Audio support.
    * Safe no-op outside the YouTube environment.
    */
   gameReady(): void {
-    this.sdk?.game.gameReady();
+    this.sdk?.game.gameReady({ supportsAudio: true });
   }
 
   /**

@@ -105,15 +105,21 @@ async function main(): Promise<void> {
   // Draw a static background so the canvas is never blank during load
   engine.drawMenuFrame();
 
+  // Show the menu first so it is visibly rendered before gameReady fires.
+  ui.showMenu();
+
   // ── YouTube Playables lifecycle ────────────────────────────────────────
 
-  // firstFrameReady: signal as soon as first pixels are painted
+  // firstFrameReady: signal as soon as first pixels are painted.
+  // The adapter queues this internally if the SDK is not yet ready and
+  // replays it immediately after initializeSdk() resolves.
   ytAdapter.firstFrameReady();
 
   // Async SDK init — registers pause/resume/audio callbacks.
   // We do NOT await this; it resolves in the background so the menu
   // appears immediately (local dev: resolves instantly via fallback).
-  // gameReady is called once init settles.
+  // gameReady is called only after showMenu() has already been called above,
+  // ensuring the game is genuinely interactive when the signal fires.
   ytAdapter.init({
     onPause: () => {
       if (engine.state === 'running') {
@@ -145,9 +151,6 @@ async function main(): Promise<void> {
     // Fallback: init failed (already handled inside adapter) — still signal ready
     ytAdapter.gameReady();
   });
-
-  // Show the menu
-  ui.showMenu();
 
   // ── Visibility change ──────────────────────────────────────────────────
 

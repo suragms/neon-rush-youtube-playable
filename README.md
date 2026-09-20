@@ -179,6 +179,35 @@ The UI has been fully redesigned with a premium futuristic neon visual language.
 
 ---
 
+## 🔒 Certification Hardening
+
+The following hardening pass was applied to ensure YouTube Playables readiness:
+
+**SDK lifecycle:**
+- `firstFrameReady()` is now queued in the adapter if called before `initializeSdk()` resolves, and flushed immediately once the SDK is available — the signal is never lost
+- `showMenu()` is called before the async `gameReady()` chain so the game is genuinely interactive when `gameReady` fires
+- `gameReady()` passes `{ supportsAudio: true }` to correctly signal Web Audio support
+
+**UI / Game Over:**
+- Game over screen now shows **SCORE**, **BEST**, and **COINS** for the completed run
+
+**Input:**
+- Escape key closes the How To Play or Settings panel when open, falling back to pause toggle — `preventDefault` is not called on Escape
+
+**Storage:**
+- Save data now includes a `version` field for safe schema evolution
+- Data from unknown future schema versions is safely ignored
+
+**Security / policy:** No `eval`, no external requests, no analytics, no tracking, no clipboard, no login UI, no fake YouTube controls.
+
+**Build (post-hardening):** 46.89 KB raw / 13.62 KB gzip — single JS bundle, zero runtime dependencies.
+
+**Tests:** 46/46 passing · TypeScript strict · 0 errors
+
+**Certification status:** Development complete. Playables-ready. Official YouTube certification pending.
+
+---
+
 ## 📄 License
 
 MIT License — Copyright (c) 2026 Surag. See [LICENSE](LICENSE) for details.

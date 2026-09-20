@@ -468,6 +468,7 @@ export class UIManager {
   private gameoverScreen!: HTMLElement;
   private goScoreNum!: HTMLElement;
   private goBestNum!: HTMLElement;
+  private goCoinsNum!: HTMLElement;
   private goNewBest!: HTMLElement;
 
   private soundToggle!: HTMLButtonElement;
@@ -577,6 +578,7 @@ export class UIManager {
     this.gameoverScreen.classList.add('active', 'nr-fade-in');
     this.goScoreNum.textContent = String(stats.score);
     this.goBestNum.textContent = String(bestScore);
+    this.goCoinsNum.textContent = String(stats.coins);
     this.goNewBest.hidden = !isRecord;
   }
 
@@ -1006,8 +1008,17 @@ export class UIManager {
     bestPart.appendChild(this.goBestNum);
     bestPart.appendChild(bestLabel);
 
+    const coinsPart = el('div', 'nr-score-block');
+    const coinsLabel = el('div', 'nr-score-label', 'COINS');
+    this.goCoinsNum = el('div', 'nr-score-num', '0');
+    this.goCoinsNum.style.color = '#ffe600';
+    this.goCoinsNum.style.textShadow = '0 0 10px rgba(255,230,0,.4)';
+    coinsPart.appendChild(this.goCoinsNum);
+    coinsPart.appendChild(coinsLabel);
+
     scoresRow.appendChild(scorePart);
     scoresRow.appendChild(bestPart);
+    scoresRow.appendChild(coinsPart);
 
     const playAgainBtn = btn('▶  PLAY AGAIN', 'primary', 'Play again');
     playAgainBtn.addEventListener('click', () => this.callbacks.onRestart());
@@ -1126,8 +1137,18 @@ export class UIManager {
           e.preventDefault();
           this.callbacks.onJump();
           break;
-        case 'KeyP':
         case 'Escape':
+          // Close any open overlay panels first (How To Play / Settings).
+          // Only forward to pause handler if no panel was closed.
+          if (!this.howToScreen.hidden) {
+            this._hidePanel(this.howToScreen);
+          } else if (!this.settingsScreen.hidden) {
+            this._hidePanel(this.settingsScreen);
+          } else {
+            this.callbacks.onPause();
+          }
+          break;
+        case 'KeyP':
           this.callbacks.onPause();
           break;
         case 'KeyM':
